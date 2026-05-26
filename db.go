@@ -157,6 +157,78 @@ func (db *DB) Delete(key []byte) error {
 	delete(db.index, string(key))
 	return nil
 }
+
+func (db *DB) Compact() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.closed {
+		return ErrClosed
+	}
+
+	path := db.file.Name()
+	tmpPath := path + ".compact"
+
+	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+
+	newIndex := make(map[string]int64)
+
+	for key, offset := range db.index {
+		if _, err := db.file.Seek(offset, io.SeekStart); err != nil {
+			_ = tmpFile.Close()
+			return err
+		}
+
+		rec, err := readRecord(db.file)
+		if err != nil {
+			_ = tmpFile.Close()
+			return err
+		}
+
+		newOffset, err := tmpFile.Seek(0, io.SeekEnd)
+		if err != nil {
+			_ = tmpFile.Close()
+			return err
+		}
+
+		if err := writeRecord(tmpFile, rec); err != nil {
+			_ = tmpFile.Close()
+			return err
+		}
+
+		newIndex[key] = newOffset
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return err
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := db.file.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+
+	newFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+
+	db.file = newFile
+	db.index = newIndex
+
+	return nil
+}
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
