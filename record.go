@@ -63,3 +63,32 @@ func readRecord(r io.Reader) (Record, error) {
 		flags: flags,
 	}, nil
 }
+
+func readRecordAt(r io.ReaderAt, offset int64) (Record, error) {
+	header := make([]byte, headerSize)
+	if _, err := r.ReadAt(header, offset); err != nil {
+		return Record{}, err
+	}
+
+	keyLen := binary.LittleEndian.Uint32(header[0:4])
+	valueLen := binary.LittleEndian.Uint32(header[4:8])
+	flags := header[8]
+
+	key := make([]byte, keyLen)
+	value := make([]byte, valueLen)
+
+	pos := offset + headerSize
+	if _, err := r.ReadAt(key, pos); err != nil {
+		return Record{}, err
+	}
+	pos += int64(keyLen)
+	if _, err := r.ReadAt(value, pos); err != nil {
+		return Record{}, err
+	}
+
+	return Record{
+		key:   key,
+		value: value,
+		flags: flags,
+	}, nil
+}

@@ -113,11 +113,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
-	if _, err := db.file.Seek(offset, io.SeekStart); err != nil {
-		return nil, err
-	}
-
-	rec, err := readRecord(db.file)
+	rec, err := readRecordAt(db.file, offset)
 	if err != nil {
 		return nil, err
 	}
