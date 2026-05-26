@@ -3,26 +3,25 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/ouchbouk/tinydb"
 	"net"
 	"strings"
-	"sync"
 )
 
 type Server struct {
-	mu   sync.RWMutex
-	data map[string]string
+	db *tinydb.DB
 }
 
 func main() {
-
+	db, err := tinydb.Open("tiny.db")
 	s := &Server{
-		data: make(map[string]string),
+		db: db,
 	}
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		panic(err)
 	}
-
+	defer s.db.Close()
 	defer ln.Close()
 	fmt.Println("server listening on :8080")
 
@@ -73,25 +72,34 @@ func (s *Server) handleCommand(line string) string {
 			return "ERR usage: GET key"
 		}
 
-		s.mu.RLock()
-		value, ok := s.data[parts[1]]
-		s.mu.RUnlock()
-
-		if !ok {
-			return "ERR not found"
+		value, err := s.db.Get([]byte(parts[1]))
+		if err != nil {
+			return "ERR " + err.Error()
 		}
 
-		return "OK " + value
+		return "OK " + string(value)
 
 	case "SET":
 		if len(parts) != 3 {
 			return "ERR usage: SET key value"
 		}
 
-		s.mu.Lock()
-		s.data[parts[1]] = parts[2]
-		s.mu.Unlock()
+		err := s.db.Set([]byte(parts[1]), []byte(parts[2]))
+		if err != nil {
+			return "ERR " + err.Error()
+		}
 
+		return "OK"
+
+	case "DELETE":
+		if len(parts) != 2 {
+			return "ERR usage: DELETE key value"
+		}
+
+		err := s.db.Delete([]byte(parts[1]))
+		if err != nil {
+			return "ERR " + err.Error()
+		}
 		return "OK"
 
 	default:
