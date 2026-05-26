@@ -10,13 +10,13 @@ const (
 	flagTombstone = byte(1)
 )
 
-type record struct {
+type Record struct {
 	key   []byte
 	value []byte
 	flags byte
 }
 
-func writeRecord(w io.Writer, r record) error {
+func writeRecord(w io.Writer, r Record) error {
 	header := make([]byte, headerSize)
 
 	binary.LittleEndian.PutUint32(header[0:4], uint32(len(r.key)))
@@ -36,11 +36,11 @@ func writeRecord(w io.Writer, r record) error {
 	return nil
 }
 
-func readRecord(r io.Reader) (record, error) {
+func readRecord(r io.Reader) (Record, error) {
 	header := make([]byte, headerSize)
 
 	if _, err := io.ReadFull(r, header); err != nil {
-		return record{}, err
+		return Record{}, err
 	}
 
 	keyLen := binary.LittleEndian.Uint32(header[0:4])
@@ -51,13 +51,13 @@ func readRecord(r io.Reader) (record, error) {
 	value := make([]byte, valueLen)
 
 	if _, err := io.ReadFull(r, key); err != nil {
-		return record{}, err
+		return Record{}, err
 	}
 	if _, err := io.ReadFull(r, value); err != nil {
-		return record{}, err
+		return Record{}, err
 	}
 
-	return record{
+	return Record{
 		key:   key,
 		value: value,
 		flags: flags,

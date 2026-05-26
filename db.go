@@ -82,7 +82,7 @@ func (db *DB) Set(key, value []byte) error {
 		return err
 	}
 
-	rec := record{
+	rec := Record{
 		key:   append([]byte(nil), key...),
 		value: append([]byte(nil), value...),
 		flags: 0,
@@ -140,7 +140,7 @@ func (db *DB) Delete(key []byte) error {
 		return ErrEmptyKey
 	}
 
-	rec := record{
+	rec := Record{
 		key:   append([]byte(nil), key...),
 		value: nil,
 		flags: flagTombstone,
