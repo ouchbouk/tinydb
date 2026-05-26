@@ -77,7 +77,26 @@ func (db *DB) Set(key, value []byte) error {
 		return ErrEmptyKey
 	}
 
-	db.data[string(key)] = append([]byte(nil), value...)
+	offset, err := db.file.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+
+	rec := record{
+		key:   append([]byte(nil), key...),
+		value: append([]byte(nil), value...),
+		flags: 0,
+	}
+
+	if err := writeRecord(db.file, rec); err != nil {
+		return err
+	}
+
+	if err := db.file.Sync(); err != nil {
+		return err
+	}
+
+	db.index[string(key)] = offset
 	return nil
 }
 
@@ -89,12 +108,25 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrClosed
 	}
 
-	value, ok := db.data[string(key)]
+	offset, ok := db.index[string(key)]
 	if !ok {
 		return nil, ErrKeyNotFound
 	}
 
-	return append([]byte(nil), value...), nil
+	if _, err := db.file.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	rec, err := readRecord(db.file)
+	if err != nil {
+		return nil, err
+	}
+
+	if rec.flags&flagTombstone != 0 {
+		return nil, ErrKeyNotFound
+	}
+
+	return append([]byte(nil), rec.value...), nil
 }
 
 func (db *DB) Delete(key []byte) error {
@@ -104,15 +136,35 @@ func (db *DB) Delete(key []byte) error {
 	if db.closed {
 		return ErrClosed
 	}
+	if len(key) == 0 {
+		return ErrEmptyKey
+	}
 
-	delete(db.data, string(key))
+	rec := record{
+		key:   append([]byte(nil), key...),
+		value: nil,
+		flags: flagTombstone,
+	}
+
+	if err := writeRecord(db.file, rec); err != nil {
+		return err
+	}
+
+	if err := db.file.Sync(); err != nil {
+		return err
+	}
+
+	delete(db.index, string(key))
 	return nil
 }
-
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	if db.closed {
+		return ErrClosed
+	}
+
 	db.closed = true
-	return nil
+	return db.file.Close()
 }
