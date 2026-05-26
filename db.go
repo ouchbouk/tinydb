@@ -1,17 +1,69 @@
 package tinydb
 
-import "sync"
+import (
+	"errors"
+	"io"
+	"os"
+	"sync"
+)
 
 type DB struct {
 	mu     sync.RWMutex
+	file   *os.File
 	data   map[string][]byte
+	index  map[string]int64
 	closed bool
 }
 
 func Open(path string) (*DB, error) {
-	return &DB{
-		data: make(map[string][]byte),
-	}, nil
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
+	if err != nil {
+		return nil, err
+	}
+
+	db := &DB{
+		file:  file,
+		index: make(map[string]int64),
+	}
+
+	if err := db.loadIndex(); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func (db *DB) loadIndex() error {
+	if _, err := db.file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	for {
+		offset, err := db.file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+
+		rec, err := readRecord(db.file)
+		if err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				break
+			}
+			return err
+		}
+
+		key := string(rec.key)
+
+		if rec.flags&flagTombstone != 0 {
+			delete(db.index, key)
+		} else {
+			db.index[key] = offset
+		}
+	}
+
+	_, err := db.file.Seek(0, io.SeekEnd)
+	return err
 }
 
 func (db *DB) Set(key, value []byte) error {
