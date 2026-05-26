@@ -35,17 +35,9 @@ func Open(path string) (*DB, error) {
 }
 
 func (db *DB) loadIndex() error {
-	if _, err := db.file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-
+	var offset int64
 	for {
-		offset, err := db.file.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return err
-		}
-
-		rec, err := readRecord(db.file)
+		rec, err := readRecordAt(db.file, offset)
 		if err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				break
@@ -60,6 +52,8 @@ func (db *DB) loadIndex() error {
 		} else {
 			db.index[key] = offset
 		}
+
+		offset += headerSize + int64(len(rec.key)) + int64(len(rec.value))
 	}
 
 	_, err := db.file.Seek(0, io.SeekEnd)
@@ -173,12 +167,7 @@ func (db *DB) Compact() error {
 	newIndex := make(map[string]int64)
 
 	for key, offset := range db.index {
-		if _, err := db.file.Seek(offset, io.SeekStart); err != nil {
-			_ = tmpFile.Close()
-			return err
-		}
-
-		rec, err := readRecord(db.file)
+		rec, err := readRecordAt(db.file, offset)
 		if err != nil {
 			_ = tmpFile.Close()
 			return err
