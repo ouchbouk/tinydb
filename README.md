@@ -1,21 +1,28 @@
 # tinydb
 
-A tiny append-only key/value database in Go.
+A tiny append-only key/value database in Go, plus a minimal TCP server/client demo.
 
 ## Features
-- `Set(key, value)` writes records to a log file
-- `Get(key)` reads the latest value using an in-memory index
-- `Delete(key)` writes a tombstone record
-- `Close()` closes the file handle safely
-- Data persists across process restarts (close + reopen)
+- `Open(path)` opens (or creates) a file-backed DB
+- `Set(key, value)` appends a record and updates index
+- `Get(key)` reads latest value by index offset
+- `Delete(key)` appends a tombstone record
+- `Compact()` rewrites only live records into a new file
+- `Close()` closes the DB file handle
+- Data persists across close/reopen
 
-## Install
+## Project Layout
+- `db.go`, `record.go`, `errors.go`: core DB
+- `cmd/server/main.go`: TCP server exposing simple commands
+- `cmd/client/main.go`: interactive TCP client
+
+## Run Tests
 
 ```bash
 go test ./...
 ```
 
-## Usage
+## Library Usage
 
 ```go
 package main
@@ -47,7 +54,31 @@ func main() {
 }
 ```
 
-## Notes
-- Keys must be non-empty (`ErrEmptyKey`).
-- Missing keys return `ErrKeyNotFound`.
-- Operations on a closed DB return `ErrClosed`.
+## TCP Demo
+
+Start server:
+
+```bash
+go run ./cmd/server
+```
+
+Start client (new terminal):
+
+```bash
+go run ./cmd/client
+```
+
+Example commands:
+
+```text
+PING
+SET name Alice
+GET name
+DELETE name
+GET name
+```
+
+## Error Notes
+- Empty keys return `ErrEmptyKey`
+- Missing keys return `ErrKeyNotFound`
+- Operations after close return `ErrClosed`
